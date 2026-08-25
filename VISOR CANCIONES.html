@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Cancionero</title>
+<style>
+  :root{
+    --bg:#211E19;
+    --surface:#2E2A23;
+    --surface2:#3A3429;
+    --text:#F0E7D6;
+    --text-dim:#B9AD97;
+    --amber:#C98A3E;
+    --amber-dim:#8C5F2C;
+    --line:#4A4235;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  }
+  header{
+    padding:20px 18px 14px;
+    border-bottom:1px solid var(--line);
+    position:sticky; top:0; background:var(--bg); z-index:10;
+  }
+  h1{
+    font-family:Georgia,'Times New Roman',serif;
+    font-size:1.4rem; margin:0 0 4px; letter-spacing:0.3px;
+  }
+  .subtitle{color:var(--text-dim); font-size:0.82rem; margin:0;}
+
+  .loadBar{
+    padding:14px 18px; border-bottom:1px solid var(--line); background:var(--surface);
+    display:flex; gap:10px; align-items:center; flex-wrap:wrap;
+  }
+  .btn{
+    background:var(--amber); color:#211E19; border:none;
+    padding:11px 16px; border-radius:6px; font-size:0.9rem; font-weight:600; cursor:pointer;
+  }
+  .btn.secondary{ background:transparent; color:var(--amber); border:1px solid var(--amber-dim); }
+  .btn:active{opacity:0.8;}
+  input[type=file]{display:none;}
+
+  .filters{ padding:14px 18px; border-bottom:1px solid var(--line); }
+  #search{
+    width:100%; padding:12px 14px; background:var(--surface2); border:1px solid var(--line);
+    border-radius:6px; color:var(--text); font-size:1rem; margin-bottom:10px;
+  }
+  .selectRow{ display:flex; gap:8px; flex-wrap:wrap; }
+  .selectRow select{
+    flex:1; min-width:100px; padding:9px 8px; background:var(--surface2); border:1px solid var(--line);
+    border-radius:6px; color:var(--text); font-size:0.85rem;
+  }
+
+  .resultsCount{ padding:10px 18px; color:var(--text-dim); font-size:0.82rem; }
+
+  #list{ padding:0 18px 30px; }
+  .item{
+    background:var(--surface); border:1px solid var(--line); border-radius:8px;
+    padding:12px 14px; margin-bottom:8px; cursor:pointer; display:flex;
+    justify-content:space-between; align-items:center; gap:10px;
+  }
+  .item:active{ background:var(--surface2); }
+  .item .t{ font-weight:600; font-size:0.98rem; }
+  .item .c{ color:var(--text-dim); font-size:0.82rem; margin-top:2px; }
+  .item .tags{ display:flex; gap:5px; flex-shrink:0; flex-wrap:wrap; justify-content:flex-end; max-width:110px; }
+  .tag{
+    font-size:0.68rem; padding:2px 7px; border-radius:20px; background:var(--surface2);
+    color:var(--amber); border:1px solid var(--amber-dim); white-space:nowrap;
+  }
+
+  .empty{ padding:60px 20px; text-align:center; color:var(--text-dim); }
+  .empty b{ color:var(--text); }
+
+  /* Vista de canción a pantalla completa */
+  #songView{
+    display:none; position:fixed; inset:0; background:var(--bg); z-index:100;
+    flex-direction:column;
+  }
+  #songView.open{ display:flex; }
+  .songTop{
+    padding:14px 16px; border-bottom:1px solid var(--line); background:var(--surface);
+    display:flex; align-items:center; gap:12px; flex-shrink:0;
+  }
+  .songTop .exitBtn{
+    background:var(--amber); color:#211E19; border:none; padding:9px 16px;
+    border-radius:6px; font-weight:700; font-size:0.9rem; cursor:pointer; flex-shrink:0;
+  }
+  .songTop .info{ overflow:hidden; }
+  .songTop .info .t{ font-weight:700; font-size:1rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .songTop .info .c{ color:var(--text-dim); font-size:0.8rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .fontCtrl{ margin-left:auto; display:flex; gap:6px; flex-shrink:0; }
+  .fontCtrl button{
+    background:var(--surface2); color:var(--amber); border:1px solid var(--amber-dim);
+    width:32px; height:32px; border-radius:6px; font-size:1rem; font-weight:700; cursor:pointer;
+  }
+  .transposeBar{
+    display:flex; align-items:center; gap:8px; padding:10px 16px;
+    border-bottom:1px solid var(--line); background:var(--surface); flex-shrink:0;
+  }
+  .transposeBar button{
+    background:var(--surface2); color:var(--amber); border:1px solid var(--amber-dim);
+    min-width:34px; height:32px; border-radius:6px; font-size:0.95rem; font-weight:700; cursor:pointer; padding:0 8px;
+  }
+  .transposeBar button.reset{ margin-left:auto; color:var(--text-dim); font-weight:600; font-size:0.78rem; }
+  #transposeLabel{ min-width:60px; text-align:center; font-weight:600; font-size:0.88rem; }
+  #songBody{
+    flex:1; overflow:auto; padding:18px 16px 60px;
+    font-family:'SF Mono',Menlo,Consolas,monospace; white-space:pre; line-height:1.6;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Cancionero</h1>
+  <p class="subtitle">Buscador de letras y acordes</p>
+</header>
+
+<div class="loadBar">
+  <label class="btn" for="jsonInput">📂 Cargar cancionero.json</label>
+  <input type="file" id="jsonInput" accept=".json">
+  <span id="loadStatus" style="color:var(--text-dim); font-size:0.82rem;"></span>
+</div>
+
+<div class="filters" id="filters" style="display:none;">
+  <input type="text" id="search" placeholder="Buscar por título, cantante, estilo, idioma o ritmo...">
+  <div class="selectRow">
+    <select id="fIdioma"><option value="">Idioma: todos</option></select>
+    <select id="fEstilo"><option value="">Estilo: todos</option></select>
+    <select id="fRitmo"><option value="">Ritmo: todos</option></select>
+  </div>
+</div>
+
+<div class="resultsCount" id="resultsCount" style="display:none;"></div>
+<div id="list"></div>
+
+<div class="empty" id="emptyMsg">
+  Cargá tu archivo cancionero.json para empezar a buscar.
+</div>
+
+<!-- Vista a pantalla completa -->
+<div id="songView">
+  <div class="songTop">
+    <button class="exitBtn" onclick="closeSong()">✕ Salir</button>
+    <div class="info">
+      <div class="t" id="svTitulo"></div>
+      <div class="c" id="svCantante"></div>
+    </div>
+    <div class="fontCtrl">
+      <button onclick="changeFont(-1)">A−</button>
+      <button onclick="changeFont(1)">A+</button>
+    </div>
+  </div>
+  <div class="transposeBar" id="transposeBar">
+    <span style="color:var(--text-dim); font-size:0.8rem;">Tono</span>
+    <button onclick="changeTranspose(-1)">−1</button>
+    <span id="transposeLabel">original</span>
+    <button onclick="changeTranspose(1)">+1</button>
+    <button class="reset" onclick="changeTranspose(0, true)">Restablecer</button>
+  </div>
+  <div id="songBody"></div>
+</div>
+
+<script>
+let songs = [];
+let fontSize = 15;
+let currentSong = null;
+let transposeOffset = 0;
+
+const NOTE_INDEX = {C:0,'C#':1,Db:1,D:2,'D#':3,Eb:3,E:4,F:5,'F#':6,Gb:6,G:7,'G#':8,Ab:8,A:9,'A#':10,Bb:10,B:11};
+const SHARP_NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+const CHORD_SUFFIX = 'maj9|maj7|maj|min9|min7|min|m7b5|m7#5|m6\\/9|dim7|dim|aug|sus2|sus4|sus|add9|add11|add2|6\\/9|m11|m13|m9|m7|m6|M7|m|7|9|11|13|6|5|4|2';
+const CHORD_TOKEN_RE = new RegExp(`^([A-G])(#|b)?(${CHORD_SUFFIX})?(\\/([A-G])(#|b)?)?$`);
+
+function transposeNote(noteStr, semitones){
+  const idx = NOTE_INDEX[noteStr];
+  if(idx === undefined) return noteStr;
+  const newIdx = ((idx + semitones) % 12 + 12) % 12;
+  return SHARP_NAMES[newIdx];
+}
+
+function transposeToken(tok, semitones){
+  const m = tok.match(CHORD_TOKEN_RE);
+  if(!m) return tok;
+  const [, root, acc, suffix, , bassRoot, bassAcc] = m;
+  let out = transposeNote(root + (acc||''), semitones) + (suffix||'');
+  if(bassRoot){
+    out += '/' + transposeNote(bassRoot + (bassAcc||''), semitones);
+  }
+  return out;
+}
+
+function transposeText(text, semitones){
+  if(semitones === 0) return text;
+  return text.split('\n').map(line => {
+    const segments = line.split(/(\s+)/);
+    for(let i = 0; i < segments.length; i += 2){
+      const tok = segments[i];
+      if(!tok) continue;
+      const newTok = transposeToken(tok, semitones);
+      if(newTok !== tok){
+        const delta = newTok.length - tok.length;
+        segments[i] = newTok;
+        if(delta !== 0 && segments[i+1] && /^\s+$/.test(segments[i+1])){
+          const newLen = segments[i+1].length - delta;
+          segments[i+1] = ' '.repeat(Math.max(1, newLen));
+        }
+      }
+    }
+    return segments.join('');
+  }).join('\n');
+}
+
+document.getElementById('jsonInput').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try{
+      const data = JSON.parse(ev.target.result);
+      songs = data.map(s => ({
+        idioma: (s.idioma||'').trim(),
+        estilo: (s.estilo||'').trim(),
+        cantante: (s.cantante||'').trim(),
+        titulo: (s.titulo||'').trim(),
+        ritmo: (s.ritmo||'').trim(),
+        body: s.body||''
+      }));
+      document.getElementById('loadStatus').textContent = `${songs.length} canciones cargadas`;
+      document.getElementById('filters').style.display = 'block';
+      buildFilterOptions();
+      render();
+    }catch(err){
+      alert('No se pudo leer el archivo: ' + err.message);
+    }
+  };
+  reader.readAsText(file, 'UTF-8');
+});
+
+function buildFilterOptions(){
+  fillSelect('fIdioma', 'Idioma', unique(songs.map(s=>s.idioma)));
+  fillSelect('fEstilo', 'Estilo', unique(songs.map(s=>s.estilo)));
+  fillSelect('fRitmo', 'Ritmo', unique(songs.map(s=>s.ritmo)));
+}
+function unique(arr){
+  return [...new Set(arr.filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+}
+function fillSelect(id, label, values){
+  const el = document.getElementById(id);
+  el.innerHTML = `<option value="">${label}: todos</option>` +
+    values.map(v => `<option value="${escapeAttr(v)}">${escapeHtml(v)}</option>`).join('');
+}
+
+document.getElementById('search').addEventListener('input', render);
+document.getElementById('fIdioma').addEventListener('change', render);
+document.getElementById('fEstilo').addEventListener('change', render);
+document.getElementById('fRitmo').addEventListener('change', render);
+
+function render(){
+  const term = document.getElementById('search').value.toLowerCase().trim();
+  const fIdioma = document.getElementById('fIdioma').value;
+  const fEstilo = document.getElementById('fEstilo').value;
+  const fRitmo = document.getElementById('fRitmo').value;
+
+  const results = songs.filter(s => {
+    if(fIdioma && s.idioma !== fIdioma) return false;
+    if(fEstilo && s.estilo !== fEstilo) return false;
+    if(fRitmo && s.ritmo !== fRitmo) return false;
+    if(!term) return true;
+    const hay = `${s.titulo} ${s.cantante} ${s.estilo} ${s.idioma} ${s.ritmo}`.toLowerCase();
+    return hay.includes(term);
+  });
+
+  document.getElementById('emptyMsg').style.display = songs.length ? 'none' : 'block';
+  document.getElementById('resultsCount').style.display = songs.length ? 'block' : 'none';
+  document.getElementById('resultsCount').textContent = `${results.length} resultado${results.length===1?'':'s'}`;
+
+  const listEl = document.getElementById('list');
+  listEl.innerHTML = results.slice(0, 300).map((s, idx) => {
+    const realIndex = songs.indexOf(s);
+    return `
+    <div class="item" onclick="openSong(${realIndex})">
+      <div>
+        <div class="t">${escapeHtml(s.titulo) || '(sin título)'}</div>
+        <div class="c">${escapeHtml(s.cantante) || '(sin cantante)'}</div>
+      </div>
+      <div class="tags">
+        ${s.estilo ? `<span class="tag">${escapeHtml(s.estilo)}</span>` : ''}
+        ${s.idioma ? `<span class="tag">${escapeHtml(s.idioma)}</span>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function openSong(index){
+  currentSong = songs[index];
+  transposeOffset = 0;
+  document.getElementById('svTitulo').textContent = currentSong.titulo || '(sin título)';
+  document.getElementById('svCantante').textContent = [currentSong.cantante, currentSong.estilo, currentSong.ritmo ? 'Ritmo ' + currentSong.ritmo : '']
+    .filter(Boolean).join(' · ');
+  document.getElementById('songBody').style.fontSize = fontSize + 'px';
+  document.getElementById('songView').classList.add('open');
+  renderSongBody();
+  document.getElementById('songBody').scrollTop = 0;
+}
+function renderSongBody(){
+  const text = transposeOffset === 0 ? currentSong.body : transposeText(currentSong.body, transposeOffset);
+  document.getElementById('songBody').textContent = text;
+  document.getElementById('transposeLabel').textContent =
+    transposeOffset === 0 ? 'original' : (transposeOffset > 0 ? '+' : '') + transposeOffset;
+}
+function changeTranspose(delta, reset){
+  transposeOffset = reset ? 0 : transposeOffset + delta;
+  renderSongBody();
+}
+function closeSong(){
+  document.getElementById('songView').classList.remove('open');
+}
+function changeFont(delta){
+  fontSize = Math.max(10, Math.min(28, fontSize + delta));
+  document.getElementById('songBody').style.fontSize = fontSize + 'px';
+}
+
+function escapeHtml(str){
+  return (str || '').replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+}
+function escapeAttr(str){
+  return escapeHtml(str).replace(/"/g,'&quot;');
+}
+</script>
+
+</body>
+</html>

@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Normalizador de Cancionero</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+  :root{
+    --bg:#211E19;
+    --surface:#2E2A23;
+    --surface2:#3A3429;
+    --text:#F0E7D6;
+    --text-dim:#B9AD97;
+    --amber:#C98A3E;
+    --amber-dim:#8C5F2C;
+    --ok:#5F8A70;
+    --warn:#B5573C;
+    --line:#4A4235;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    padding-bottom:100px;
+  }
+  header{
+    padding:22px 18px 16px;
+    border-bottom:1px solid var(--line);
+    position:sticky; top:0; background:var(--bg); z-index:10;
+  }
+  h1{
+    font-family:Georgia,'Times New Roman',serif;
+    font-size:1.5rem;
+    margin:0 0 4px;
+    letter-spacing:0.3px;
+  }
+  .subtitle{color:var(--text-dim); font-size:0.85rem; margin:0;}
+  .toolbar{
+    display:flex; flex-wrap:wrap; gap:10px; align-items:center;
+    padding:14px 18px; border-bottom:1px solid var(--line);
+    background:var(--surface);
+  }
+  .btn{
+    background:var(--amber); color:#211E19; border:none;
+    padding:11px 16px; border-radius:6px; font-size:0.9rem; font-weight:600;
+    cursor:pointer;
+  }
+  .btn.secondary{
+    background:transparent; color:var(--amber); border:1px solid var(--amber-dim);
+  }
+  .btn:active{opacity:0.8;}
+  input[type=file]{display:none;}
+  .stats{
+    padding:12px 18px; font-size:0.85rem; color:var(--text-dim);
+    display:flex; gap:16px; flex-wrap:wrap;
+  }
+  .stats b{color:var(--text);}
+  .stats .warn-count{color:var(--warn); font-weight:600;}
+  #search{
+    width:100%; padding:11px 14px; margin:0 18px 14px; max-width:calc(100% - 36px);
+    background:var(--surface2); border:1px solid var(--line); border-radius:6px;
+    color:var(--text); font-size:0.95rem;
+  }
+  #list{padding:0 18px;}
+  .card{
+    background:var(--surface); border:1px solid var(--line); border-radius:8px;
+    margin-bottom:14px; overflow:hidden;
+  }
+  .card.has-warning{border-color:var(--warn);}
+  .card-head{
+    padding:12px 14px; display:flex; justify-content:space-between;
+    align-items:center; cursor:pointer; gap:10px;
+  }
+  .card-titles{overflow:hidden;}
+  .card-titles .t{font-weight:600; font-size:1rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .card-titles .a{color:var(--text-dim); font-size:0.82rem;}
+  .badge{
+    font-size:0.72rem; padding:3px 8px; border-radius:20px; white-space:nowrap;
+    background:var(--warn); color:#211E19; font-weight:700;
+  }
+  .chev{color:var(--text-dim); font-size:1.1rem; transition:transform 0.15s;}
+  .card.open .chev{transform:rotate(90deg);}
+  .card-body{display:none; padding:0 14px 16px; border-top:1px solid var(--line);}
+  .card.open .card-body{display:block;}
+  .field-row{display:flex; gap:8px; margin-top:10px; flex-wrap:wrap;}
+  .field{flex:1; min-width:130px;}
+  .field label{display:block; font-size:0.7rem; color:var(--text-dim); margin-bottom:3px; text-transform:uppercase; letter-spacing:0.4px;}
+  .field input{
+    width:100%; padding:9px 10px; background:var(--surface2);
+    border:1px solid var(--line); border-radius:5px; color:var(--text); font-size:0.9rem;
+  }
+  .field input.warn-field{border-color:var(--warn);}
+  textarea{
+    width:100%; margin-top:10px; padding:10px; background:var(--surface2);
+    border:1px solid var(--line); border-radius:5px; color:var(--text);
+    font-family:'SF Mono',Menlo,Consolas,monospace; font-size:0.8rem; line-height:1.5;
+    min-height:180px; resize:vertical; white-space:pre;
+  }
+  .helper{font-size:0.72rem; color:var(--text-dim); margin-top:6px;}
+  .empty{padding:60px 20px; text-align:center; color:var(--text-dim);}
+  .empty b{color:var(--text);}
+  .footer-bar{
+    position:fixed; bottom:0; left:0; right:0; background:var(--surface);
+    border-top:1px solid var(--line); padding:12px 18px; display:flex; gap:10px;
+    flex-wrap:wrap;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Normalizador de Cancionero</h1>
+  <p class="subtitle">Cabecera: Idioma · Estilo · Cantante · Título · Ritmo. El resto es letra y acordes, tal cual.</p>
+</header>
+
+<div class="toolbar">
+  <label class="btn" for="fileInput">📂 Elegir archivos .txt</label>
+  <input type="file" id="fileInput" multiple accept=".txt" webkitdirectory>
+  <label class="btn secondary" for="fileInputPlain">Elegir sin carpeta</label>
+  <input type="file" id="fileInputPlain" multiple accept=".txt">
+  <label class="btn secondary" for="importJson">📥 Importar JSON anterior</label>
+  <input type="file" id="importJson" accept=".json">
+</div>
+
+<div class="toolbar" id="batchBar" style="display:none;">
+  <div class="field" style="flex:1; min-width:100px;">
+    <label style="color:var(--text-dim); font-size:0.7rem; text-transform:uppercase;">Idioma</label>
+    <input id="batchIdioma" value="Español">
+  </div>
+  <div class="field" style="flex:1; min-width:100px;">
+    <label style="color:var(--text-dim); font-size:0.7rem; text-transform:uppercase;">Estilo</label>
+    <input id="batchEstilo" list="estilosList" placeholder="ej. Bolero">
+  </div>
+  <div class="field" style="flex:1; min-width:100px;">
+    <label style="color:var(--text-dim); font-size:0.7rem; text-transform:uppercase;">Cantante</label>
+    <input id="batchCantante" placeholder="ej. Luis Miguel">
+  </div>
+  <button class="btn" style="align-self:flex-end;" onclick="applyBatch()">Aplicar a todas</button>
+</div>
+
+<datalist id="estilosList"></datalist>
+
+<div class="stats" id="stats" style="display:none;">
+  <span><b id="statNew">0</b> nuevas (esta carpeta)</span>
+  <span><b id="statImported">0</b> ya archivadas</span>
+  <span class="warn-count"><span id="statWarn">0</span> con caracteres dañados ⚠️</span>
+</div>
+
+<div class="toolbar" id="filterBar" style="display:none; padding-top:0; padding-bottom:10px;">
+  <button class="btn secondary" id="filterNewBtn" onclick="setFilter('new')">Ver solo nuevas</button>
+  <button class="btn secondary" id="filterAllBtn" onclick="setFilter('all')">Ver todas</button>
+</div>
+
+<input type="text" id="search" placeholder="Buscar por título, cantante, estilo o ritmo..." style="display:none;">
+
+<div id="list"></div>
+
+<div class="empty" id="emptyMsg">
+  Elegí los .txt de un mismo cantante/carpeta para empezar.<br><br>
+  Si ya tenés un cancionero.json de una tanda anterior, importalo primero para seguir sumando canciones al mismo archivo.
+</div>
+
+<div class="footer-bar" id="footerBar" style="display:none;">
+  <button class="btn" onclick="exportJSON()">⬇️ Exportar JSON (para el visor)</button>
+  <button class="btn secondary" onclick="exportZip()">⬇️ Exportar .txt normalizados (ZIP)</button>
+</div>
+
+<script>
+let songs = [];
+let viewFilter = 'new'; // 'new' muestra solo la carpeta actual; 'all' muestra también lo importado
+
+const CODE_LINE_RE = /^[A-Z0-9\s]{4,40}$/;
+const GRID_LINE_RE = /^[\s|oO0]{8,}$/;
+const MARK_LINE_RE = /^[\s|]{3,}$/;
+const CREDIT_RE = /(e-?chords|thonz of guitar tabs)/i;
+const UNDERSCORE_RE = /^_{4,}$/;
+
+function stripAccents(str){
+  return (str || '')
+    .replace(/ñ/g, '\u0001').replace(/Ñ/g, '\u0002')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '').normalize('NFC')
+    .replace(/\u0001/g, 'ñ').replace(/\u0002/g, 'Ñ');
+}
+
+function looksLikeChordHeaderRow(line){
+  const tokens = line.trim().split(/\s{2,}/).filter(Boolean);
+  if(tokens.length < 2) return false;
+  return tokens.every(t => /^[A-G][#b]?[a-zA-Z0-9+\-\/]{0,6}$/.test(t));
+}
+
+function filenameToTitulo(filename){
+  let name = filename.replace(/\.txt$/i, '');
+  name = name.replace(/^\s*\d+[\s._-]+/, ''); // saca numeración inicial tipo "1-", "01_", "1."
+  name = name.replace(/_/g, ' ').trim();
+  return stripAccents(name);
+}
+
+// Lee el archivo probando UTF-8 estricto primero; si falla (bytes inválidos),
+// reintenta como Windows-1252, que es la codificación típica de estos .txt viejos.
+function readFileBestEffort(file){
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const buffer = e.target.result;
+      let text;
+      try {
+        text = new TextDecoder('utf-8', {fatal:true}).decode(buffer);
+      } catch(err){
+        text = new TextDecoder('windows-1252').decode(buffer);
+      }
+      resolve(text);
+    };
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+function parseSong(filename, raw, relPath){
+  let lines = raw.replace(/\r\n/g,'\n').split('\n');
+  let titulo = filenameToTitulo(filename);
+  let cantante = '';
+  let ritmo = '';
+
+  // Escanear cabecera original solo para ubicar dónde empieza el cuerpo real
+  // (autor entre paréntesis, línea de código interno del órgano tipo "S21 T70 V01 D60")
+  let headerEnd = -1;
+  let codeLineText = '';
+  for(let j = 0; j < Math.min(lines.length, 8); j++){
+    const l = lines[j].trim();
+    if(l === ''){ continue; }
+    if(/^\(.*\)$/.test(l)){
+      continue; // autor entre paréntesis: se descarta
+    }
+    if(CODE_LINE_RE.test(l) && /\d/.test(l)){
+      headerEnd = j;
+      codeLineText = l; // se conserva, va al inicio de la letra
+      const sMatch = l.match(/S\s*0*(\d{1,4})/i);
+      if(sMatch) ritmo = sMatch[1]; // sin ceros a la izquierda, máx 4 dígitos
+      break;
+    }
+  }
+  if(headerEnd === -1) headerEnd = 0;
+
+  // Cuerpo: desde después de la línea de código, saltando líneas en blanco
+  let bodyStart = headerEnd + 1;
+  while(bodyStart < lines.length && lines[bodyStart].trim() === '') bodyStart++;
+  let bodyLines = lines.slice(bodyStart);
+
+  // Cortar basura del final: créditos del sitio, diagramas de digitación,
+  // y marcas de rasgueo tipo "||| ||||"
+  let cutAt = bodyLines.length;
+  for(let k = 0; k < bodyLines.length; k++){
+    const l = bodyLines[k];
+    if(UNDERSCORE_RE.test(l.trim()) || CREDIT_RE.test(l) || GRID_LINE_RE.test(l) || (l.trim() !== '' && MARK_LINE_RE.test(l))){
+      cutAt = k;
+      while(cutAt > 0 && (bodyLines[cutAt-1].trim() === '' || looksLikeChordHeaderRow(bodyLines[cutAt-1]))){
+        cutAt--;
+      }
+      break;
+    }
+  }
+  bodyLines = bodyLines.slice(0, cutAt);
+  let body = stripAccents(bodyLines.join('\n').replace(/\s+$/,''));
+  if(codeLineText) body = codeLineText + '\n' + body;
+
+  if(relPath){
+    const parts = relPath.split('/');
+    if(!cantante && parts.length >= 3) cantante = parts[2];
+  }
+
+  const idioma = '';
+  const estilo = '';
+  const fullText = titulo + cantante + body;
+  const warnings = (fullText.match(/\uFFFD/g) || []).length;
+
+  return {
+    filename, idioma, estilo, cantante, titulo, ritmo,
+    body, warnings, isNew: true, id: Math.random().toString(36).slice(2)
+  };
+}
+
+async function handleFiles(fileList){
+  const files = Array.from(fileList).filter(f => f.name.toLowerCase().endsWith('.txt'));
+  if(files.length === 0) return;
+  for(const f of files){
+    const text = await readFileBestEffort(f);
+    const relPath = f.webkitRelativePath || '';
+    songs.push(parseSong(f.name, text, relPath));
+  }
+  songs.sort((a,b) => a.titulo.localeCompare(b.titulo));
+  document.getElementById('batchBar').style.display = 'flex';
+  viewFilter = 'new';
+  render();
+}
+
+document.getElementById('fileInput').addEventListener('change', e => handleFiles(e.target.files));
+document.getElementById('fileInputPlain').addEventListener('change', e => handleFiles(e.target.files));
+document.getElementById('search').addEventListener('input', render);
+
+document.getElementById('importJson').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    try {
+      const data = JSON.parse(ev.target.result);
+      data.forEach(s => {
+        songs.push({
+          filename: '(importado)', idioma: s.idioma || '', estilo: s.estilo || '',
+          cantante: s.cantante || '', titulo: s.titulo || '', ritmo: s.ritmo || '',
+          body: s.body || '', warnings: ((s.body||'').match(/\uFFFD/g) || []).length,
+          isNew: false, id: Math.random().toString(36).slice(2)
+        });
+      });
+      songs.sort((a,b) => a.titulo.localeCompare(b.titulo));
+      document.getElementById('batchBar').style.display = 'flex';
+      viewFilter = 'new';
+      render();
+    } catch(err){
+      alert('No se pudo leer ese JSON: ' + err.message);
+    }
+  };
+  reader.readAsText(file, 'UTF-8');
+});
+
+function setFilter(f){
+  viewFilter = f;
+  render();
+}
+
+function applyBatch(){
+  const idioma = stripAccents(document.getElementById('batchIdioma').value.trim());
+  const estilo = stripAccents(document.getElementById('batchEstilo').value.trim());
+  const cantante = stripAccents(document.getElementById('batchCantante').value.trim());
+  songs.forEach(s => {
+    if(!s.isNew) return; // nunca toca lo ya archivado/importado
+    if(idioma) s.idioma = idioma;
+    if(estilo) s.estilo = estilo;
+    if(cantante) s.cantante = cantante;
+  });
+  render();
+}
+
+function updateEstilosList(){
+  const dl = document.getElementById('estilosList');
+  const unique = [...new Set(songs.map(s => s.estilo).filter(Boolean))];
+  dl.innerHTML = unique.map(e => `<option value="${escapeAttr(e)}">`).join('');
+}
+
+function render(){
+  const listEl = document.getElementById('list');
+  const term = document.getElementById('search').value.toLowerCase();
+  const base = viewFilter === 'new' ? songs.filter(s => s.isNew) : songs;
+  const filtered = base.filter(s =>
+    s.titulo.toLowerCase().includes(term) ||
+    s.cantante.toLowerCase().includes(term) ||
+    s.estilo.toLowerCase().includes(term) ||
+    s.ritmo.includes(term)
+  );
+
+  document.getElementById('emptyMsg').style.display = songs.length ? 'none' : 'block';
+  document.getElementById('stats').style.display = songs.length ? 'flex' : 'none';
+  document.getElementById('filterBar').style.display = songs.length ? 'flex' : 'none';
+  document.getElementById('search').style.display = songs.length ? 'block' : 'none';
+  document.getElementById('footerBar').style.display = songs.length ? 'flex' : 'none';
+
+  document.getElementById('statNew').textContent = songs.filter(s => s.isNew).length;
+  document.getElementById('statImported').textContent = songs.filter(s => !s.isNew).length;
+  document.getElementById('statWarn').textContent = songs.filter(s => s.warnings > 0).length;
+  document.getElementById('filterNewBtn').style.background = viewFilter === 'new' ? 'var(--amber)' : 'transparent';
+  document.getElementById('filterNewBtn').style.color = viewFilter === 'new' ? '#211E19' : 'var(--amber)';
+  document.getElementById('filterAllBtn').style.background = viewFilter === 'all' ? 'var(--amber)' : 'transparent';
+  document.getElementById('filterAllBtn').style.color = viewFilter === 'all' ? '#211E19' : 'var(--amber)';
+  updateEstilosList();
+
+  listEl.innerHTML = filtered.map(s => `
+    <div class="card ${s.warnings > 0 ? 'has-warning' : ''}" data-id="${s.id}">
+      <div class="card-head" onclick="toggleCard('${s.id}')">
+        <div class="card-titles">
+          <div class="t">${escapeHtml(s.titulo) || '(sin título)'}</div>
+          <div class="a">${escapeHtml(s.cantante) || '(sin cantante)'} · ${escapeHtml(s.filename)}</div>
+        </div>
+        <div style="display:flex; align-items:center; gap:8px;">
+          ${s.warnings > 0 ? `<span class="badge">${s.warnings} ⚠️</span>` : ''}
+          <span class="chev">▶</span>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="field-row">
+          <div class="field">
+            <label>Idioma</label>
+            <input value="${escapeAttr(s.idioma)}" oninput="updateField('${s.id}','idioma',this.value)">
+          </div>
+          <div class="field">
+            <label>Estilo</label>
+            <input value="${escapeAttr(s.estilo)}" list="estilosList" oninput="updateField('${s.id}','estilo',this.value)">
+          </div>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label>Cantante</label>
+            <input value="${escapeAttr(s.cantante)}" oninput="updateField('${s.id}','cantante',this.value)">
+          </div>
+          <div class="field">
+            <label>Título</label>
+            <input value="${escapeAttr(s.titulo)}" oninput="updateField('${s.id}','titulo',this.value)">
+          </div>
+          <div class="field" style="max-width:90px;">
+            <label>Ritmo</label>
+            <input value="${escapeAttr(s.ritmo)}" maxlength="4" oninput="updateField('${s.id}','ritmo',this.value)">
+          </div>
+        </div>
+        <label style="display:block; font-size:0.7rem; color:var(--text-dim); margin-top:12px; text-transform:uppercase; letter-spacing:0.4px;">Letra / acordes</label>
+        <textarea oninput="updateField('${s.id}','body',this.value)">${escapeHtml(s.body)}</textarea>
+        ${s.warnings > 0 ? '<div class="helper">⚠️ Este texto tiene caracteres dañados (aparecen como recuadros). Corregilos a mano si te importa esta canción.</div>' : ''}
+      </div>
+    </div>
+  `).join('');
+}
+
+function toggleCard(id){
+  const el = document.querySelector(`.card[data-id="${id}"]`);
+  el.classList.toggle('open');
+}
+
+function updateField(id, field, value){
+  const song = songs.find(s => s.id === id);
+  if(!song) return;
+  song[field] = field === 'ritmo' ? value.replace(/\D/g,'').slice(0,4) : stripAccents(value);
+  if(field !== 'body'){
+    const head = document.querySelector(`.card[data-id="${id}"] .card-titles`);
+    if(head){
+      head.querySelector('.t').textContent = song.titulo || '(sin título)';
+      head.querySelector('.a').textContent = `${song.cantante || '(sin cantante)'} · ${song.filename}`;
+    }
+  }
+  const fullText = song.titulo + song.cantante + song.body;
+  song.warnings = (fullText.match(/\uFFFD/g) || []).length;
+  const card = document.querySelector(`.card[data-id="${id}"]`);
+  if(card) card.classList.toggle('has-warning', song.warnings > 0);
+  document.getElementById('statWarn').textContent = songs.filter(s => s.warnings > 0).length;
+  if(field === 'estilo') updateEstilosList();
+}
+
+function escapeHtml(str){
+  return (str || '').replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+}
+function escapeAttr(str){
+  return escapeHtml(str).replace(/"/g,'&quot;');
+}
+
+function download(filename, content, type){
+  const blob = new Blob([content], {type});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function exportJSON(){
+  const data = songs.map(({id, warnings, filename, idioma, estilo, cantante, titulo, ritmo, body}) =>
+    ({idioma, estilo, cantante, titulo, ritmo, body})
+  );
+  download('cancionero.json', JSON.stringify(data, null, 2), 'application/json');
+}
+
+function exportZip(){
+  const zip = new JSZip();
+  songs.forEach(s => {
+    const header = `Idioma: ${s.idioma}\nEstilo: ${s.estilo}\nCantante: ${s.cantante}\nTitulo: ${s.titulo}\nRitmo: ${s.ritmo}\n---\n`;
+    const safeName = (s.titulo || s.filename).replace(/[\\/:*?"<>|]/g,'').trim() || s.filename;
+    zip.file(`${safeName}.txt`, header + s.body);
+  });
+  zip.generateAsync({type:'blob'}).then(blob => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'cancionero_normalizado.zip';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  });
+}
+</script>
+
+</body>
+</html>
