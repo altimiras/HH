@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fotos por defecto para GEDCOM</title>
+<style>
+  :root{
+    --ink:#2b2420;
+    --paper:#f6f1e7;
+    --paper-deep:#ece3d2;
+    --line:#c9bda5;
+    --accent:#7a3b2e;
+    --accent-soft:#a9614c;
+    --male:#3d5a6c;
+    --female:#8a3b52;
+    --ok:#3e6b4f;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family: 'Iowan Old Style','Palatino Linotype',Georgia,'Times New Roman',serif;
+    background:
+      radial-gradient(circle at 15% 10%, rgba(122,59,46,0.05), transparent 40%),
+      var(--paper);
+    color:var(--ink);
+    min-height:100vh;
+    padding: 40px 20px 80px;
+  }
+  .sheet{
+    max-width:720px;
+    margin:0 auto;
+    background:var(--paper-deep);
+    border:1px solid var(--line);
+    box-shadow: 0 1px 0 rgba(0,0,0,0.03), 0 20px 40px -30px rgba(43,36,32,0.5);
+    padding: 44px 48px 40px;
+    position:relative;
+  }
+  .sheet::before{
+    content:"";
+    position:absolute;
+    inset:8px;
+    border:1px solid rgba(122,59,46,0.25);
+    pointer-events:none;
+  }
+  .eyebrow{
+    font-family: 'Courier New', monospace;
+    letter-spacing:0.18em;
+    text-transform:uppercase;
+    font-size:11px;
+    color:var(--accent-soft);
+    margin:0 0 6px;
+  }
+  h1{
+    font-size:28px;
+    font-weight:600;
+    margin:0 0 6px;
+    letter-spacing:0.01em;
+  }
+  .sub{
+    color:#6b5e50;
+    font-size:14.5px;
+    line-height:1.55;
+    margin:0 0 30px;
+    max-width:52ch;
+  }
+  .legend{
+    display:flex;
+    gap:22px;
+    margin-bottom:28px;
+    font-size:13px;
+    flex-wrap:wrap;
+  }
+  .legend div{display:flex;align-items:center;gap:8px;}
+  .swatch{
+    width:34px;height:34px;
+    border:1px solid var(--line);
+    background-size:cover;
+    background-position:center;
+    flex:none;
+  }
+  .drop{
+    border:1.5px dashed var(--line);
+    background: rgba(255,255,255,0.35);
+    padding: 34px 20px;
+    text-align:center;
+    cursor:pointer;
+    transition: border-color .15s ease, background .15s ease;
+  }
+  .drop:hover, .drop.drag{
+    border-color:var(--accent-soft);
+    background: rgba(255,255,255,0.6);
+  }
+  .drop input{display:none;}
+  .drop-title{font-size:16px;margin-bottom:6px;}
+  .drop-sub{font-size:12.5px;color:#8a7c6c;}
+  .filename{
+    margin-top:16px;
+    font-family:'Courier New',monospace;
+    font-size:13px;
+    color:var(--accent);
+    word-break:break-all;
+  }
+  button{
+    font-family:inherit;
+    font-size:14px;
+    letter-spacing:0.03em;
+    border:1px solid var(--accent);
+    background:var(--accent);
+    color:var(--paper);
+    padding:12px 22px;
+    cursor:pointer;
+    margin-top:22px;
+    width:100%;
+    transition: background .15s ease, color .15s ease;
+  }
+  button:disabled{
+    opacity:0.35;
+    cursor:not-allowed;
+  }
+  button:not(:disabled):hover{
+    background:transparent;
+    color:var(--accent);
+  }
+  .results{
+    margin-top:30px;
+    border-top:1px solid var(--line);
+    padding-top:22px;
+    display:none;
+  }
+  .results.show{display:block;}
+  .stat-row{
+    display:flex;
+    justify-content:space-between;
+    font-size:14px;
+    padding:7px 0;
+    border-bottom:1px dotted var(--line);
+  }
+  .stat-row span:last-child{font-family:'Courier New',monospace;}
+  .stat-row.male span:last-child{color:var(--male);}
+  .stat-row.female span:last-child{color:var(--female);}
+  .stat-row.ok span:last-child{color:var(--ok);}
+  .download{
+    display:none;
+  }
+  .download.show{display:block;}
+  .error{
+    margin-top:18px;
+    font-size:13.5px;
+    color:#a12e2e;
+    display:none;
+  }
+  .error.show{display:block;}
+  footer{
+    text-align:center;
+    font-size:11.5px;
+    color:#a99b8a;
+    margin-top:22px;
+    letter-spacing:0.03em;
+  }
+</style>
+</head>
+<body>
+  <div class="sheet">
+    <p class="eyebrow">Árbol genealógico · utilidad GEDCOM</p>
+    <h1>Fotos por defecto</h1>
+    <p class="sub">Sube un archivo GEDCOM (.ged). Cada persona que no tenga una fotografía asociada recibirá una imagen por defecto según su sexo. Los registros que ya tienen foto no se modifican.</p>
+
+    <div class="legend">
+      <div><span class="swatch" style="background-image:url('https://i.ibb.co/ychnPTp7/w1.jpg')"></span>Hombres sin foto</div>
+      <div><span class="swatch" style="background-image:url('https://i.ibb.co/NdM0sKq2/w2.jpg')"></span>Mujeres sin foto</div>
+    </div>
+
+    <label class="drop" id="dropZone">
+      <input type="file" id="fileInput" accept=".ged">
+      <div class="drop-title">Arrastra tu archivo .ged aquí</div>
+      <div class="drop-sub">o haz clic para seleccionarlo</div>
+      <div class="filename" id="filename"></div>
+    </label>
+
+    <button id="processBtn" disabled>Procesar GEDCOM</button>
+
+    <div class="error" id="errorBox"></div>
+
+    <div class="results" id="results">
+      <div class="stat-row"><span>Personas en el árbol</span><span id="statTotal">0</span></div>
+      <div class="stat-row ok"><span>Ya tenían foto (sin cambios)</span><span id="statSkipped">0</span></div>
+      <div class="stat-row male"><span>Fotos añadidas — hombres</span><span id="statMale">0</span></div>
+      <div class="stat-row female"><span>Fotos añadidas — mujeres</span><span id="statFemale">0</span></div>
+
+      <div class="download show">
+        <button id="downloadBtn">Descargar GEDCOM modificado</button>
+      </div>
+    </div>
+
+    <footer>Las URLs de imagen se insertan como bloques OBJE / FILE / FORM / TITL, compatibles con el estándar GEDCOM 5.5.1</footer>
+  </div>
+
+<script>
+const MALE_URL = "https://i.ibb.co/ychnPTp7/w1.jpg";
+const FEMALE_URL = "https://i.ibb.co/NdM0sKq2/w2.jpg";
+
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+const filenameEl = document.getElementById('filename');
+const processBtn = document.getElementById('processBtn');
+const downloadBtn = document.getElementById('downloadBtn');
+const resultsBox = document.getElementById('results');
+const errorBox = document.getElementById('errorBox');
+
+let rawText = null;
+let originalName = "arbol.ged";
+let outputBlob = null;
+let outputName = "";
+
+function showError(msg){
+  errorBox.textContent = msg;
+  errorBox.classList.add('show');
+}
+function clearError(){
+  errorBox.textContent = "";
+  errorBox.classList.remove('show');
+}
+
+function handleFile(file){
+  clearError();
+  resultsBox.classList.remove('show');
+  if(!file){ return; }
+  if(!file.name.toLowerCase().endsWith('.ged')){
+    showError('Por favor selecciona un archivo con extensión .ged');
+    processBtn.disabled = true;
+    return;
+  }
+  originalName = file.name;
+  filenameEl.textContent = file.name;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    rawText = e.target.result;
+    processBtn.disabled = false;
+  };
+  reader.onerror = () => {
+    showError('No se pudo leer el archivo. Intenta de nuevo.');
+  };
+  reader.readAsText(file, 'UTF-8');
+}
+
+dropZone.addEventListener('click', (e) => {
+  // let the native label->input click happen, no extra logic needed
+});
+fileInput.addEventListener('change', (e) => {
+  handleFile(e.target.files[0]);
+});
+['dragover','dragenter'].forEach(evt => {
+  dropZone.addEventListener(evt, (e) => {
+    e.preventDefault();
+    dropZone.classList.add('drag');
+  });
+});
+['dragleave','drop'].forEach(evt => {
+  dropZone.addEventListener(evt, (e) => {
+    e.preventDefault();
+    dropZone.classList.remove('drag');
+  });
+});
+dropZone.addEventListener('drop', (e) => {
+  e.preventDefault();
+  const file = e.dataTransfer.files[0];
+  if(file){
+    fileInput.files = e.dataTransfer.files;
+    handleFile(file);
+  }
+});
+
+function processGedcom(text){
+  const lineEnding = text.includes('\r\n') ? '\r\n' : '\n';
+  let lines = text.split(/\r\n|\n/);
+  if(lines.length && lines[lines.length-1] === ''){
+    lines.pop();
+  }
+
+  // Split into records by top-level "0 " lines
+  const records = [];
+  let current = null;
+  for(const line of lines){
+    if(/^0 /.test(line)){
+      if(current) records.push(current);
+      current = [line];
+    } else {
+      if(!current){ current = [line]; }
+      else current.push(line);
+    }
+  }
+  if(current) records.push(current);
+
+  let total = 0, skipped = 0, addedMale = 0, addedFemale = 0;
+  const newRecords = [];
+
+  for(const rec of records){
+    const header = rec[0];
+    const m = header.match(/^0 (@I\d+@) INDI/);
+    if(!m){
+      newRecords.push(rec);
+      continue;
+    }
+    total++;
+
+    const hasObje = rec.some(l => /^1 OBJE/.test(l));
+    if(hasObje){
+      skipped++;
+      newRecords.push(rec);
+      continue;
+    }
+
+    let sex = null;
+    for(const l of rec){
+      const sm = l.match(/^1 SEX (\w+)/);
+      if(sm){ sex = sm[1]; break; }
+    }
+
+    let name = null;
+    for(const l of rec){
+      const nm = l.match(/^1 NAME (.+)/);
+      if(nm){ name = nm[1].replace(/\//g,'').trim(); break; }
+    }
+    if(!name) name = "individuo";
+
+    let url;
+    if(sex === 'M'){ url = MALE_URL; addedMale++; }
+    else if(sex === 'F'){ url = FEMALE_URL; addedFemale++; }
+    else {
+      // sin sexo definido: no se agrega foto
+      skipped++;
+      newRecords.push(rec);
+      continue;
+    }
+
+    const objeBlock = [
+      "1 OBJE",
+      `2 FILE ${url}`,
+      "2 FORM URL",
+      `2 TITL Foto de ${name}`
+    ];
+
+    let insertIdx = null;
+    for(let i=1;i<rec.length;i++){
+      if(/^1 (FAMC|FAMS)/.test(rec[i])){
+        insertIdx = i;
+        break;
+      }
+    }
+    let newRec;
+    if(insertIdx === null){
+      newRec = rec.concat(objeBlock);
+    } else {
+      newRec = rec.slice(0,insertIdx).concat(objeBlock).concat(rec.slice(insertIdx));
+    }
+    newRecords.push(newRec);
+  }
+
+  const outLines = [];
+  for(const rec of newRecords){ outLines.push(...rec); }
+  const outContent = outLines.join(lineEnding) + lineEnding;
+
+  return { outContent, total, skipped, addedMale, addedFemale };
+}
+
+processBtn.addEventListener('click', () => {
+  if(!rawText) return;
+  clearError();
+  try{
+    const result = processGedcom(rawText);
+    document.getElementById('statTotal').textContent = result.total;
+    document.getElementById('statSkipped').textContent = result.skipped;
+    document.getElementById('statMale').textContent = result.addedMale;
+    document.getElementById('statFemale').textContent = result.addedFemale;
+    resultsBox.classList.add('show');
+
+    outputBlob = new Blob([result.outContent], {type:'text/plain;charset=utf-8'});
+    const base = originalName.replace(/\.ged$/i,'');
+    outputName = `${base}_con_fotos.ged`;
+  } catch(err){
+    showError('Ocurrió un error al procesar el archivo: ' + err.message);
+  }
+});
+
+downloadBtn.addEventListener('click', () => {
+  if(!outputBlob) return;
+  const url = URL.createObjectURL(outputBlob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = outputName;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+});
+</script>
+</body>
+</html>

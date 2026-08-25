@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Limpiador Local de Entradas HTML</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f0f2f5;
+            color: #1a202c;
+            padding: 30px 15px;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: #ffffff;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+        }
+        h1 { font-size: 1.6em; color: #2b6cb0; margin-bottom: 8px; }
+        p.desc { font-size: 0.95em; color: #4a5568; margin-bottom: 20px; line-height: 1.5; }
+        .step { margin-bottom: 18px; }
+        label { display: block; font-weight: 600; margin-bottom: 6px; color: #2d3748; }
+        input[type="text"], textarea {
+            width: 100%;
+            padding: 10px 12px;
+            border: 2px solid #e2e8f0;
+            border-radius: 6px;
+            font-size: 0.95em;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        input[type="text"]:focus, textarea:focus { border-color: #3182ce; }
+        textarea { height: 160px; font-family: monospace; font-size: 0.85em; resize: vertical; }
+        button {
+            width: 100%;
+            padding: 12px;
+            background-color: #3182ce;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 1em;
+            font-weight: 600;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+        button:hover { background-color: #2b6cb0; }
+        .download-area {
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid #e2e8f0;
+            text-align: center;
+            display: none;
+        }
+        .btn-download {
+            background-color: #38a169;
+            display: inline-block;
+            text-decoration: none;
+            color: white;
+            padding: 12px 24px;
+            border-radius: 6px;
+            font-weight: bold;
+        }
+        .btn-download:hover { background-color: #2f855a; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>Limpiador Local de Entradas</h1>
+    <p class="desc">Genera una página estática independiente, eliminando todos los enlaces hacia tu Blogger para que nadie pueda navegar hacia tu sitio.</p>
+
+    <div class="step">
+        <label for="titleInput">1. Título de la entrada:</label>
+        <input type="text" id="titleInput" placeholder="Ej: El encanto de El Bolsón">
+    </div>
+
+    <div class="step">
+        <label for="htmlInput">2. Pega el código de la entrada (o el HTML de Blogger):</label>
+        <textarea id="htmlInput" placeholder="Pega aquí el código copiado de tu entrada de Blogger..."></textarea>
+    </div>
+
+    <button onclick="limpiarYGenerar()">Procesar y Crear HTML Limpio</button>
+
+    <div class="download-area" id="downloadArea">
+        <a id="downloadBtn" class="btn-download" download="entrada_independiente.html">Descargar HTML Sin Enlaces</a>
+    </div>
+</div>
+
+<script>
+function limpiarYGenerar() {
+    const title = document.getElementById('titleInput').value.trim() || 'Entrada Independiente';
+    const rawHtml = document.getElementById('htmlInput').value;
+    const downloadArea = document.getElementById('downloadArea');
+    const downloadBtn = document.getElementById('downloadBtn');
+
+    if (!rawHtml) {
+        alert('Por favor pega el contenido o HTML de la entrada.');
+        return;
+    }
+
+    // Crear un contenedor temporal para manipular el HTML
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = rawHtml;
+
+    // 1. Eliminar todos los enlaces <a> pero conservar las imágenes y texto que contengan
+    const links = tempDiv.querySelectorAll('a');
+    links.forEach(a => {
+        const span = document.createElement('span');
+        span.innerHTML = a.innerHTML;
+        a.parentNode.replaceChild(span, a);
+    });
+
+    // 2. Eliminar scripts, estilos externos o elementos innecesarios
+    tempDiv.querySelectorAll('script, style, iframe').forEach(el => el.remove());
+
+    // 3. Estructurar el nuevo archivo HTML independiente
+    const cleanContent = tempDiv.innerHTML;
+    const finalHtml = `<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${title}</title>
+    <style>
+        body {
+            font-family: 'Georgia', serif;
+            background-color: #f4f1ea;
+            color: #2b2b2b;
+            line-height: 1.8;
+            padding: 30px 15px;
+        }
+        .container {
+            max-width: 750px;
+            margin: 0 auto;
+            background: #ffffff;
+            padding: 40px 30px;
+            border-radius: 6px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.06);
+        }
+        h1 {
+            font-size: 2em;
+            color: #1a1a1a;
+            margin-bottom: 25px;
+            text-align: center;
+        }
+        p { margin-bottom: 18px; text-align: justify; }
+        img {
+            max-width: 100%;
+            height: auto;
+            display: block;
+            margin: 20px auto;
+            border-radius: 4px;
+        }
+        footer {
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+            text-align: center;
+            font-size: 0.85em;
+            color: #888;
+            font-family: sans-serif;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>${title}</h1>
+        <div>${cleanContent}</div>
+        <footer>Documento estático e independiente.</footer>
+    </div>
+</body>
+</html>`;
+
+    // Generar archivo listo para descargar
+    const blob = new Blob([finalHtml], { type: 'text/html' });
+    downloadBtn.href = URL.createObjectURL(blob);
+    downloadArea.style.display = 'block';
+}
+</script>
+
+</body>
+</html>
