@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Árbol genealógico – todos los parientes (Topola)</title>
+<style>
+  :root{
+    --bg:#fbfaf7; --panel:#ffffff; --ink:#1a1a1a; --muted:#7a746c; --line:#e6e2da; --accent:#8a6d3b;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:Inter,ui-sans-serif,system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--ink)}
+  header{padding:14px 16px;background:var(--panel);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:10}
+  h1{font-size:16px;margin:0 0 10px 0;font-weight:600}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:8px}
+  .row > *{flex:1 1 auto;min-width:150px}
+  input[type=file], input[type=text], select, button{
+    font:inherit;padding:9px 10px;border-radius:8px;border:1px solid var(--line);background:#fff;color:var(--ink);
+  }
+  button{cursor:pointer;background:var(--ink);color:#fff;border-color:var(--ink);flex:0 0 auto;min-width:auto}
+  button:disabled{opacity:.4;cursor:not-allowed}
+  label.chk{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted);flex:0 0 auto;min-width:auto}
+  #status{font-size:12.5px;color:var(--muted);margin-top:4px;min-height:1.2em}
+  #status.error{color:#b3261e}
+  #chartWrap{overflow:auto;width:100%;height:calc(100vh - 175px);background:#fffefc}
+  svg.graph{display:block}
+
+  .autocomplete-wrap{position:relative;flex:1 1 260px}
+  #personSearch{width:100%}
+  #personResults{
+    position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid var(--line);
+    border-top:none;border-radius:0 0 8px 8px;max-height:260px;overflow:auto;z-index:20;display:none;
+  }
+  #personResults div{padding:8px 10px;font-size:13px;cursor:pointer;border-bottom:1px solid #f2f0eb}
+  #personResults div:hover, #personResults div.active{background:#f5f2ea}
+  #personResults .empty{color:var(--muted);font-style:italic;cursor:default}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Árbol de todos los parientes — motor real de Topola</h1>
+  <div class="row">
+    <input type="file" id="gedcomFile" accept=".ged,.gedcom">
+    <div class="autocomplete-wrap">
+      <input type="text" id="personSearch" placeholder="Escribe nombre o apellido de la persona central…" autocomplete="off" disabled>
+      <div id="personResults"></div>
+    </div>
+  </div>
+  <div class="row">
+    <input type="text" id="treeTitle" placeholder="Título del árbol (opcional)">
+    <label class="chk"><input type="checkbox" id="frameDesign" checked> Enmarcar diseño</label>
+    <label class="chk"><input type="checkbox" id="framePhotos" checked> Enmarcar fotos</label>
+    <button id="renderBtn" disabled>Generar árbol</button>
+    <button id="downloadBtn" disabled>Descargar SVG</button>
+  </div>
+  <div id="status">Esperando archivo GEDCOM…</div>
+</header>
+
+<div id="chartWrap">
+  <svg id="relatives" class="graph"></svg>
+</div>
+
+<script type="module">
+  // Cargamos la librería REAL de Topola (Apache-2.0) como módulo ES, directo en el navegador,
+  // sin npm ni build. Es el mismo motor de layout que usa topola-viewer para "All relatives chart".
+  import * as topola from "https://esm.unpkg.com/topola@3.10.3";
+
+  const statusEl = document.getElementById('status');
+  const fileInput = document.getElementById('gedcomFile');
+  const personSearch = document.getElementById('personSearch');
+  const personResults = document.getElementById('personResults');
+  const renderBtn = document.getElementById('renderBtn');
+  const downloadBtn = document.getElementById('downloadBtn');
+  const treeTitleInput = document.getElementById('treeTitle');
+  const frameDesignChk = document.getElementById('frameDesign');
+  const framePhotosChk = document.getElementById('framePhotos');
+
+  let gedcomJson = null;
+  let individuals = [];
+  let selectedId = null;
+
+  function setStatus(msg, isError = false) {
+    statusEl.textContent = msg;
+    statusEl.className = isError ? 'error' : '';
+  }
+
+  function displayName(indi) {
+    // El esquema JSON de Topola puede variar levemente entre versiones;
+    // probamos varios campos posibles para el nombre.
+    const first = indi.firstName || indi.givn || '';
+    const last = indi.lastName || indi.surn || '';
+    const name = (first + ' ' + last).trim() || indi.name || indi.id;
+    return name;
+  }
+
+  // ---------- Carga de archivo ----------
+  fileInput.addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setStatus('Leyendo archivo…');
+    try {
+      const text = await file.text();
+      gedcomJson = topola.gedcomToJson(text);
+
+      individuals = (gedcomJson.indis || []).slice();
+      individuals.sort((a, b) => displayName(a).localeCompare(displayName(b), 'es'));
+
+      selectedId = null;
+      personSearch.value = '';
+      personSearch.disabled = false;
+      renderBtn.disabled = true;
+      setStatus(`Cargado: ${individuals.length} personas encontradas. Escribe un nombre para elegir la persona central.`);
+    } catch (err) {
+      console.error(err);
+      setStatus('Error leyendo/parseando el GEDCOM: ' + err.message, true);
+    }
+  });
+
+  // ---------- Buscador con autocompletado ----------
+  function renderResults(query) {
+    const q = query.trim().toLowerCase();
+    personResults.innerHTML = '';
+    if (!q) { personResults.style.display = 'none'; return; }
+
+    const matches = individuals.filter(i => displayName(i).toLowerCase().includes(q)).slice(0, 50);
+
+    if (matches.length === 0) {
+      const div = document.createElement('div');
+      div.className = 'empty';
+      div.textContent = 'Sin coincidencias';
+      personResults.appendChild(div);
+    } else {
+      for (const indi of matches) {
+        const div = document.createElement('div');
+        div.textContent = `${displayName(indi)} (${indi.id})`;
+        div.addEventListener('click', () => {
+          selectedId = indi.id;
+          personSearch.value = displayName(indi);
+          personResults.style.display = 'none';
+          renderBtn.disabled = false;
+        });
+        personResults.appendChild(div);
+      }
+    }
+    personResults.style.display = 'block';
+  }
+
+  personSearch.addEventListener('input', () => {
+    selectedId = null;
+    renderBtn.disabled = true;
+    renderResults(personSearch.value);
+  });
+  personSearch.addEventListener('focus', () => {
+    if (personSearch.value.trim()) renderResults(personSearch.value);
+  });
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.autocomplete-wrap')) personResults.style.display = 'none';
+  });
+
+  // ---------- Post-procesado del SVG: marco, fotos, título, viewBox ajustado ----------
+  function postProcessSvg(svg, title) {
+    const NS = 'http://www.w3.org/2000/svg';
+    const margin = 30;
+    const titleHeight = title ? 50 : 0;
+
+    // Bounding box real de todo lo dibujado por Topola.
+    const bbox = svg.getBBox();
+
+    // Marco de fotos: buscamos elementos <image> insertados por el DetailedRenderer.
+    if (framePhotosChk.checked) {
+      const images = svg.querySelectorAll('image');
+      images.forEach(img => {
+        const x = parseFloat(img.getAttribute('x') || 0);
+        const y = parseFloat(img.getAttribute('y') || 0);
+        const w = parseFloat(img.getAttribute('width') || 0);
+        const h = parseFloat(img.getAttribute('height') || 0);
+        if (!w || !h) return;
+        const rect = document.createElementNS(NS, 'rect');
+        rect.setAttribute('x', x);
+        rect.setAttribute('y', y);
+        rect.setAttribute('width', w);
+        rect.setAttribute('height', h);
+        rect.setAttribute('fill', 'none');
+        rect.setAttribute('stroke', '#8a6d3b');
+        rect.setAttribute('stroke-width', '1.5');
+        img.parentNode.insertBefore(rect, img.nextSibling);
+      });
+    }
+
+    // Título centrado arriba del contenido.
+    if (title) {
+      const text = document.createElementNS(NS, 'text');
+      text.setAttribute('x', bbox.x + bbox.width / 2);
+      text.setAttribute('y', bbox.y - margin - 10);
+      text.setAttribute('text-anchor', 'middle');
+      text.setAttribute('font-size', '32');
+      text.setAttribute('font-family', 'Georgia, serif');
+      text.setAttribute('fill', '#1a1a1a');
+      text.textContent = title;
+      svg.appendChild(text);
+    }
+
+    // ViewBox ajustado al contenido real (sin espacios en blanco de sobra).
+    const vbX = bbox.x - margin;
+    const vbY = bbox.y - margin - titleHeight;
+    const vbW = bbox.width + margin * 2;
+    const vbH = bbox.height + margin * 2 + titleHeight;
+    svg.setAttribute('viewBox', `${vbX} ${vbY} ${vbW} ${vbH}`);
+    svg.setAttribute('width', vbW);
+    svg.setAttribute('height', vbH);
+
+    // Marco general del diseño (se dibuja al final para que quede por encima).
+    if (frameDesignChk.checked) {
+      const outer = document.createElementNS(NS, 'rect');
+      outer.setAttribute('x', vbX + 4);
+      outer.setAttribute('y', vbY + 4);
+      outer.setAttribute('width', vbW - 8);
+      outer.setAttribute('height', vbH - 8);
+      outer.setAttribute('fill', 'none');
+      outer.setAttribute('stroke', '#1a1a1a');
+      outer.setAttribute('stroke-width', '3');
+      svg.appendChild(outer);
+    }
+  }
+
+  // ---------- Generar árbol ----------
+  renderBtn.addEventListener('click', () => {
+    if (!gedcomJson || !selectedId) return;
+    setStatus('Generando árbol para ' + selectedId + '…');
+    try {
+      const svg = document.getElementById('relatives');
+      svg.innerHTML = '';
+      svg.removeAttribute('viewBox');
+      svg.removeAttribute('width');
+      svg.removeAttribute('height');
+
+      const chart = topola.createChart({
+        json: gedcomJson,
+        svgSelector: '#relatives',
+        chartType: topola.RelativesChart,
+        renderer: topola.DetailedRenderer,
+        colors: topola.ChartColors.COLOR_BY_SEX,
+      });
+
+      chart.render({ startIndi: selectedId });
+
+      // Pequeño delay para asegurar que el DOM terminó de pintarse antes de medir bbox.
+      requestAnimationFrame(() => {
+        postProcessSvg(svg, treeTitleInput.value.trim());
+        downloadBtn.disabled = false;
+        setStatus('Árbol generado. Podés descargar el SVG con el botón de arriba.');
+      });
+    } catch (err) {
+      console.error(err);
+      setStatus('Error generando el árbol: ' + err.message + ' (abrí la consola del navegador con F12 para más detalle, y pasámelo tal cual).', true);
+    }
+  });
+
+  // ---------- Descargar ----------
+  downloadBtn.addEventListener('click', () => {
+    const svg = document.getElementById('relatives');
+    const svgData = new XMLSerializer().serializeToString(svg);
+    const blob = new Blob([svgData], { type: 'image/svg+xml' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = (treeTitleInput.value.trim() || 'arbol_parientes').replace(/\s+/g, '_') + '.svg';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  });
+</script>
+
+</body>
+</html>
